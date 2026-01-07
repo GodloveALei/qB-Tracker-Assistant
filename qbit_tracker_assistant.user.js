@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         qBittorrent 助手 (v1.3 增强版)
+// @name         qBittorrent Tracker 批量修改助手 (v1.3 增强版)
 // @namespace    http://tampermonkey.net/
 // @version      1.3
-// @description  批量替换qBittorrent中某些tracker中的指定字符；增加 8 字符最小限制防止误操作，优化提示语逻辑。
+// @description  批量替换qBittorrent中某些tracker的指定字符；增加 8 字符最小限制防止误操作，优化提示语逻辑。
 // @author       DRH
 // --- 在下方修改或添加您的 qBittorrent 访问地址 ---
 // @match        http://192.168.*.*:*/*
