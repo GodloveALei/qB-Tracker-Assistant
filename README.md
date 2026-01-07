@@ -1,4 +1,4 @@
-# qB-Tracker-Assistant qBittorrent Tracker 批量修改助手
+# qB-Tracker-Assistant / qBittorrent Tracker 批量修改助手
 
 场景
 当 PT 站更换域名（如从 .com 迁移至 .net）时，手动修改成百上千个种子的 Tracker 非常痛苦。本脚本为 qB 增加了一个快捷面板，支持“先检索、再排除、后替换”的严谨分步逻辑。
