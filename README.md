@@ -1,9 +1,11 @@
 # qB-Tracker-Assistant / qBittorrent Tracker 批量修改助手
 
 场景
+
 当 PT 站更换域名（如从 .com 迁移至 .net）时，手动修改成百上千个种子的 Tracker 非常痛苦。本脚本为 qB 增加了一个快捷面板，支持“先检索、再排除、后替换”的严谨分步逻辑。
 
 功能
+
 安全第一：强制校验 8 个字符，防止误删 Passkey。
 
 去重逻辑：自动识别已存在的 Tracker，避免一个种子出现重复地址。
