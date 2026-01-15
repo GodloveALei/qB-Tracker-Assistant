@@ -9,6 +9,8 @@
 //
 // @grant        none
 // @run-at       document-end
+// @updateURL   https://raw.githubusercontent.com/GodloveALei/qB-Tracker-Assistant/main/qbit_tracker_assistant.user.js
+// @downloadURL https://raw.githubusercontent.com/GodloveALei/qB-Tracker-Assistant/main/qbit_tracker_assistant.user.js
 // ==/UserScript==
 
 (function() {
