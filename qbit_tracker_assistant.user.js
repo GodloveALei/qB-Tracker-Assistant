@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          qBittorrent Tracker Assistant
 // @namespace     http://tampermonkey.net/
-// @version       2.3.2
+// @version       2.3.3
 // @description   1.扫描失效种子打标；2.tracker地址批量替换；3.按分类批量转移种子（含未分类支持、批量起停、物理移动监控）。
 // @author        DRH
 // --- 在下方修改或添加您的 qBittorrent 访问地址 ---
@@ -9,6 +9,8 @@
 // @grant         none
 // @run-at        document-end
 
+// @downloadURL https://update.greasyfork.org/scripts/562895/qBittorrent%20Tracker%20Assistant.user.js
+// @updateURL https://update.greasyfork.org/scripts/562895/qBittorrent%20Tracker%20Assistant.meta.js
 // ==/UserScript==
 
 (function() {
@@ -28,7 +30,7 @@
 
         panel.innerHTML = `
             <span id="close-api-panel" style="position:absolute;top:8px;right:12px;cursor:pointer;color:#888;font-size:20px;font-weight:bold;line-height:1;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#888'">&times;</span>
-            <b style="color:#00bcd4;font-size:16px;">qBittorrent 助手 v2.3.2</b><br>
+            <b style="color:#00bcd4;font-size:16px;">qBittorrent 助手 v2.3.3</b><br>
 
             <div id="main-menu" style="margin-top:15px; display:block; text-align:center;">
                 <div style="color:#666; font-size:13px; margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;">请点击下方按钮进行功能选择</div>
@@ -60,7 +62,10 @@
                 </div>
                 <hr id="divider" style="display:none; border:0; border-top:1px solid #333; margin:15px 0;">
                 <div id="modify-section" style="display:none;">
-                    <div style="margin-bottom:12px;"><label style="color:#ff9800; font-weight:bold;">3. 替代文本 (替换为):</label><input type="text" id="replace-text" placeholder="需输入至少8个字符" style="width:100%;box-sizing:border-box;margin-top:5px;padding:6px;background:#333;border:1px solid #ff9800;color:#fff;border-radius:4px;"></div>
+                    <div style="margin-bottom:12px;">
+                        <label style="color:#ff9800; font-weight:bold;">3. 替代文本 (替换为):</label>
+                        <input type="text" id="replace-text" placeholder="需输入至少8个字符" style="width:100%;box-sizing:border-box;margin-top:5px;padding:6px;background:#333;border:1px solid #ff9800;color:#fff;border-radius:4px;">
+                    </div>
                     <div style="display:flex; gap:5px;">
                         <button id="replace-btn" style="flex:2;cursor:pointer;background:#ff9800;color:black;border:none;padding:10px;font-weight:bold;border-radius:4px;">🚀 确认替换</button>
                         <button id="restore-btn" style="flex:1;cursor:pointer;background:#555;color:white;border:none;padding:10px;font-weight:bold;border-radius:4px;">还原</button>
@@ -82,7 +87,7 @@
                     </label>
                     <div id="cat-items-list"></div>
                 </div>
-                <div id="batch-action-section" style="display:none; flex; gap:5px; margin-bottom:10px;">
+                <div id="batch-action-section" style="display:none; display:flex; gap:5px; margin-bottom:10px;">
                     <button id="batch-pause-btn" style="flex:1; cursor:pointer; background:#555; color:white; border:none; padding:10px; font-weight:bold; border-radius:4px;">暂停种子</button>
                     <button id="batch-resume-btn" style="flex:1; cursor:pointer; background:#00bcd4; color:black; border:none; padding:10px; font-weight:bold; border-radius:4px;">继续做种</button>
                 </div>
@@ -122,7 +127,7 @@
 
     const setStatus = (msg) => { document.getElementById('api-status').innerText = msg; };
 
-    // ================= 功能 3: 转移逻辑更新 =================
+    // ================= 功能 3: 转移与批量起停逻辑 =================
     async function importCategories() {
         setStatus("🚀 正在获取分类及路径...");
         const listDiv = document.getElementById('cat-items-list');
@@ -132,7 +137,6 @@
             const categories = await (await fetch('/api/v2/torrents/categories')).json();
             const torrents = await (await fetch('/api/v2/torrents/info')).json();
 
-            // 核心：合并现有分类与“未分类”
             let catNames = Object.keys(categories);
             if (torrents.some(t => t.category === "")) {
                 catNames.push("未分类");
@@ -179,28 +183,32 @@
         setStatus(`🔄 已复原勾选分类的初始路径。`);
     }
 
-    // 批量起停逻辑
+    // 优化后的批量起停：使用增量筛选
     async function batchAction(type) {
         const selected = Array.from(document.querySelectorAll('.cat-sel-check:checked'));
         if (selected.length === 0) { alert("请先勾选分类！"); return; }
 
-        setStatus(`🚀 正在统计种子并执行${type === 'pause' ? '暂停' : '恢复'}...`);
+        setStatus(`🚀 正在执行批量${type === 'pause' ? '暂停' : '启动'}...`);
         try {
-            const allT = await (await fetch('/api/v2/torrents/info')).json();
-            const sCats = selected.map(cb => {
-                const name = cb.getAttribute('data-cat');
-                return name === "未分类" ? "" : name;
-            });
-            const hashes = allT.filter(t => sCats.includes(t.category)).map(t => t.hash);
+            let allHashes = [];
+            // 增量逻辑：按勾选的分类精准拉取，不再下载全量几千个种子的包
+            for (const cb of selected) {
+                const catName = cb.getAttribute('data-cat');
+                const apiCatName = catName === "未分类" ? "" : catName;
+                const resp = await fetch(`/api/v2/torrents/info?category=${encodeURIComponent(apiCatName)}`);
+                const torrents = await resp.json();
+                allHashes.push(...torrents.map(t => t.hash));
+            }
 
-            if (hashes.length > 0) {
-                const fd = new FormData(); fd.append('hashes', hashes.join('|'));
+            if (allHashes.length > 0) {
+                const fd = new FormData(); fd.append('hashes', allHashes.join('|'));
                 await fetch(`/api/v2/torrents/${type}`, { method: 'POST', body: fd });
-                setStatus(`🏁 已成功对 ${hashes.length} 个种子执行了${type === 'pause' ? '暂停' : '启动'}操作。`);
-            } else { setStatus("ℹ️ 所选分类下没有发现种子。"); }
+                setStatus(`🏁 操作成功！处理种子数: ${allHashes.length} 个。`);
+            } else { setStatus("ℹ️ 所选分类下无种子。"); }
         } catch (e) { setStatus("❌ 操作失败: " + e.message); }
     }
 
+    // 优化后的转移逻辑：配合增量筛选统计
     async function startTransferLogic() {
         const btn = document.getElementById('transfer-execute-btn');
         if (btn.innerText === "一键转移") {
@@ -220,21 +228,25 @@
         isTaskRunning = true; btn.style.display = "none";
         try {
             setStatus("📊 正在统计待处理总量...");
-            const allT = await (await fetch('/api/v2/torrents/info')).json();
-            const sCats = selected.map(cb => {
-                const name = cb.getAttribute('data-cat');
-                return name === "未分类" ? "" : name;
-            });
-            const targetT = allT.filter(t => sCats.includes(t.category));
-            const total = targetT.length;
-            let current = 0;
+            let total = 0;
+            let catTorrentsMap = {};
 
+            // 增量统计
+            for (const cb of selected) {
+                const name = cb.getAttribute('data-cat');
+                const apiName = name === "未分类" ? "" : name;
+                const resp = await fetch(`/api/v2/torrents/info?category=${encodeURIComponent(apiName)}`);
+                const torrents = await resp.json();
+                catTorrentsMap[name] = torrents;
+                total += torrents.length;
+            }
+
+            let current = 0;
             for (let i = 0; i < selected.length; i++) {
                 if (!isTaskRunning) break;
                 const catDispName = selected[i].getAttribute('data-cat');
-                const catQueryName = catDispName === "未分类" ? "" : catDispName;
                 const path = document.querySelector(`.cat-path-input[data-cat="${catDispName}"]`).value.trim();
-                const hashes = targetT.filter(t => t.category === catQueryName).map(t => t.hash);
+                const hashes = catTorrentsMap[catDispName].map(t => t.hash);
 
                 if (hashes.length > 0) {
                     const fd = new FormData(); fd.append('hashes', hashes.join('|')); fd.append('location', path);
@@ -246,15 +258,15 @@
             }
 
             if (isTaskRunning) {
-                setStatus(`✅ 所有指令下发成功 (${total} 个)！\n📂 正在监控硬盘物理移动进度...`);
+                setStatus(`✅ 指令发送成功 (${total} 个)！监控硬盘移动中...`);
                 while (isTaskRunning) {
                     const checkTorrents = await (await fetch('/api/v2/torrents/info')).json();
                     const movingCount = checkTorrents.filter(t => t.state === 'moving').length;
                     if (movingCount === 0) break;
-                    setStatus(`🏁 指令已全部下发。\n🚚 硬盘正在挪动文件，剩余 ${movingCount} 个种子正在移动...`);
+                    setStatus(`🏁 指令已全部下发。\n🚚 硬盘正在移动剩余 ${movingCount} 个种子...`);
                     await new Promise(r => setTimeout(r, 3000));
                 }
-                setStatus(`🏁 序贯转移及硬盘移动任务已彻底执行完毕！`);
+                setStatus(`🏁 序贯转移及物理移动已彻底执行完毕！`);
             }
         } catch (e) { setStatus("❌ 转移过程出错: " + e.message); }
         isTaskRunning = false; btn.style.display = "block"; btn.innerText = "一键转移"; btn.style.background = "#ffc107"; btn.style.color = "black";
